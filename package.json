@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --config vite.config.ts",
     "server": "ts-node --project tsconfig.server.json server/server.ts",
-    "build": "vite build --config vite.config.ts",
+    "build": "vite build --config vite.config.ts && tsc --project tsconfig.server.json",
     "start": "node dist/server/server/server.js"
   },
   "dependencies": {
