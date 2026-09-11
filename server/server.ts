@@ -1,11 +1,28 @@
 import http from "http";
 import express from "express";
+import path from "path";
 import { Server } from "socket.io";
 import { registerWebsocketHandlers } from "./websocket-handler";
 
 const app = express();
 
+// =====================================================
+// SERVE FRONTEND
+// =====================================================
+
+const distPath = path.join(__dirname, "..");
+
+app.use(express.static(distPath));
+
+// =====================================================
+// HTTP SERVER
+// =====================================================
+
 const httpServer = http.createServer(app);
+
+// =====================================================
+// SOCKET.IO
+// =====================================================
 
 const io = new Server(httpServer, {
   cors: {
@@ -16,17 +33,6 @@ const io = new Server(httpServer, {
 
 // =====================================================
 // BASIC HTTP ROUTE
-// =====================================================
-
-app.get("/", (_req, res) => {
-  res.json({
-    message: "Collaborative Canvas Server is running",
-    status: "ok",
-  });
-});
-
-// =====================================================
-// HEALTH CHECK
 // =====================================================
 
 app.get("/health", (_req, res) => {
