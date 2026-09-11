@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <meta
+    name="description"
+    content="Real-time collaborative drawing canvas"
+  />
+
+  <title>Collaborative Canvas</title>
+
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+
+  <div id="app">
+
+    <header class="topbar">
+
+      <div class="title-section">
+
+        <h1>Collaborative Canvas</h1>
+
+        <span
+          id="connection-status"
+          class="status disconnected"
+        >
+          Connecting...
+        </span>
+
+      </div>
+
+      <div class="room-info">
+
+        <span>Room:</span>
+
+        <strong id="room-id">---</strong>
+
+      </div>
+
+    </header>
+
+    <main>
+
+      <section
+        class="toolbar"
+        aria-label="Drawing tools"
+      >
+
+        <button
+          id="brush-tool"
+          type="button"
+          class="tool-button active"
+        >
+          Brush
+        </button>
+
+        <button
+          id="eraser-tool"
+          type="button"
+          class="tool-button"
+        >
+          Eraser
+        </button>
+
+        <label class="control-group">
+
+          <span>Color</span>
+
+          <input
+            id="color-picker"
+            type="color"
+            value="#111111"
+          />
+
+        </label>
+
+        <label class="control-group size-control">
+
+          <span>Size</span>
+
+          <input
+            id="stroke-width"
+            type="range"
+            min="1"
+            max="30"
+            value="5"
+          />
+
+          <span id="stroke-width-value">5</span>
+
+        </label>
+
+        <button
+          id="undo-button"
+          type="button"
+          class="tool-button"
+        >
+          Undo
+        </button>
+
+        <button
+          id="redo-button"
+          type="button"
+          class="tool-button"
+        >
+          Redo
+        </button>
+
+        <button
+          id="clear-button"
+          type="button"
+          class="tool-button danger"
+        >
+          Clear
+        </button>
+
+      </section>
+
+      <section
+        class="canvas-container"
+        aria-label="Collaborative drawing area"
+      >
+
+        <canvas id="drawing-canvas"></canvas>
+
+      </section>
+
+      <footer class="status-bar">
+
+        <div id="user-count">
+          Users: 0
+        </div>
+
+        <div id="latency">
+          Latency: --
+        </div>
+
+      </footer>
+
+    </main>
+
+  </div>
+
+  <script
+    type="module"
+    src="./main.ts"
+  ></script>
+
+</body>
+
+</html>

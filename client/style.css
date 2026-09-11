@@ -1,0 +1,388 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+
+  width: 100%;
+  min-height: 100%;
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  background: #f4f6f8;
+  color: #10233f;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* =====================================================
+   HEADER
+   ===================================================== */
+
+.topbar {
+  width: 100%;
+  min-height: 88px;
+
+  background: white;
+
+  border-bottom: 1px solid #dfe4ea;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 20px 36px;
+
+  gap: 20px;
+}
+
+.title-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.title-section h1 {
+  margin: 0;
+
+  font-size: 32px;
+  font-weight: 700;
+
+  color: #10233f;
+}
+
+/* =====================================================
+   STATUS
+   ===================================================== */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 10px 16px;
+
+  border-radius: 999px;
+
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.status::before {
+  content: "";
+
+  width: 10px;
+  height: 10px;
+
+  border-radius: 50%;
+}
+
+.status.connected {
+  background: #e8fff4;
+  color: #008f68;
+}
+
+.status.connected::before {
+  background: #10b981;
+}
+
+.status.disconnected {
+  background: #fff0f0;
+  color: #ef3030;
+}
+
+.status.disconnected::before {
+  background: #ef3030;
+}
+
+/* =====================================================
+   ROOM
+   ===================================================== */
+
+.room-info {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 12px 18px;
+
+  border: 1px solid #dbe2ea;
+
+  border-radius: 10px;
+
+  background: #fafbfd;
+
+  font-size: 16px;
+
+  color: #61738b;
+}
+
+.room-info strong {
+  color: #10233f;
+}
+
+/* =====================================================
+   MAIN
+   ===================================================== */
+
+main {
+  width: 100%;
+
+  padding: 30px;
+}
+
+/* =====================================================
+   TOOLBAR
+   ===================================================== */
+
+.toolbar {
+  width: 100%;
+
+  min-height: 80px;
+
+  background: white;
+
+  border: 1px solid #dce3eb;
+
+  border-radius: 14px;
+
+  box-shadow:
+    0 4px 15px
+    rgba(20, 35, 55, 0.06);
+
+  display: flex;
+  align-items: center;
+
+  gap: 14px;
+
+  padding: 16px;
+
+  margin-bottom: 20px;
+
+  flex-wrap: wrap;
+}
+
+.tool-button {
+  height: 48px;
+
+  padding: 0 24px;
+
+  border-radius: 10px;
+
+  border: 1px solid #ccd6e2;
+
+  background: white;
+
+  color: #1d3557;
+
+  font-size: 17px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  user-select: none;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.tool-button:hover {
+  background: #f2f5f9;
+}
+
+.tool-button:active {
+  transform: scale(0.97);
+}
+
+.tool-button.active {
+  background: #101a2b;
+
+  border-color: #101a2b;
+
+  color: white;
+}
+
+.tool-button.danger {
+  color: #ef2525;
+
+  border-color: #ffbaba;
+}
+
+.tool-button.danger:hover {
+  background: #fff3f3;
+}
+
+/* =====================================================
+   CONTROLS
+   ===================================================== */
+
+.control-group {
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  color: #263d5a;
+
+  font-size: 17px;
+
+  font-weight: 600;
+}
+
+#color-picker {
+  width: 54px;
+  height: 42px;
+
+  padding: 3px;
+
+  border: 1px solid #ccd6e2;
+
+  border-radius: 8px;
+
+  background: white;
+
+  cursor: pointer;
+}
+
+#stroke-width {
+  width: 160px;
+
+  cursor: pointer;
+}
+
+#stroke-width-value {
+  min-width: 20px;
+
+  text-align: center;
+
+  font-weight: 600;
+}
+
+/* =====================================================
+   CANVAS
+   ===================================================== */
+
+.canvas-container {
+  position: relative;
+
+  width: 100%;
+
+  height: 600px;
+
+  background: white;
+
+  border: 2px solid #d0d8e2;
+
+  border-radius: 14px;
+
+  overflow: hidden;
+
+  box-shadow:
+    0 4px 18px
+    rgba(20, 35, 55, 0.05);
+}
+
+#drawing-canvas {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  background: white;
+
+  cursor: crosshair;
+
+  touch-action: none;
+
+  user-select: none;
+
+  -webkit-user-select: none;
+
+  -webkit-touch-callout: none;
+}
+
+/* =====================================================
+   STATUS BAR
+   ===================================================== */
+
+.status-bar {
+  width: 100%;
+
+  min-height: 54px;
+
+  margin-top: 18px;
+
+  padding: 14px 20px;
+
+  background: white;
+
+  border: 1px solid #dce3eb;
+
+  border-radius: 12px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  color: #52677f;
+
+  font-size: 16px;
+
+  font-weight: 600;
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+
+@media (max-width: 800px) {
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .title-section {
+    flex-wrap: wrap;
+  }
+
+  main {
+    padding: 20px 15px;
+  }
+
+  .canvas-container {
+    height: 500px;
+  }
+
+  .toolbar {
+    align-items: flex-start;
+  }
+}
