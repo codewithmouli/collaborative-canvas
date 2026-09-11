@@ -6,23 +6,15 @@ import { registerWebsocketHandlers } from "./websocket-handler";
 
 const app = express();
 
-// =====================================================
-// SERVE FRONTEND
-// =====================================================
-
-const distPath = path.join(__dirname, "..");
+// In production, the compiled server is inside:
+// dist/server/server/
+// So we go two levels up to:
+// dist/
+const distPath = path.join(__dirname, "../..");
 
 app.use(express.static(distPath));
 
-// =====================================================
-// HTTP SERVER
-// =====================================================
-
 const httpServer = http.createServer(app);
-
-// =====================================================
-// SOCKET.IO
-// =====================================================
 
 const io = new Server(httpServer, {
   cors: {
@@ -31,25 +23,13 @@ const io = new Server(httpServer, {
   },
 });
 
-// =====================================================
-// BASIC HTTP ROUTE
-// =====================================================
-
 app.get("/health", (_req, res) => {
   res.json({
     status: "healthy",
   });
 });
 
-// =====================================================
-// SOCKET.IO
-// =====================================================
-
 registerWebsocketHandlers(io);
-
-// =====================================================
-// START SERVER
-// =====================================================
 
 const PORT = Number(process.env.PORT) || 3000;
 
