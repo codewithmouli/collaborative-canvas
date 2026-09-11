@@ -6,8 +6,7 @@ import type {
 import {
   addUserToRoom,
   removeUserFromRoom,
-  getRoomUserCount,
-  removeUserEverywhere
+  getRoomUserCount
 } from "./rooms";
 
 import {
@@ -25,6 +24,19 @@ interface JoinRoomData {
 
 interface DrawData {
   roomId: string;
+  strokeId?: string;
+  points: {
+    x: number;
+    y: number;
+  }[];
+  color: string;
+  width: number;
+  eraser: boolean;
+}
+
+interface DrawPreviewData {
+  roomId: string;
+  strokeId: string;
   points: {
     x: number;
     y: number;
@@ -150,6 +162,8 @@ export function registerWebsocketHandlers(
             }
           );
 
+          // Send existing canvas to the new user.
+
           socket.emit(
             "canvas-state",
             {
@@ -157,6 +171,9 @@ export function registerWebsocketHandlers(
                 getStrokes(roomId)
             }
           );
+
+          // Update everyone with the current
+          // number of online users.
 
           io.to(roomId).emit(
             "user-count",
@@ -178,7 +195,71 @@ export function registerWebsocketHandlers(
       );
 
       // =================================================
-      // DRAW
+      // REAL-TIME DRAWING PREVIEW
+      // =================================================
+
+      socket.on(
+        "draw-preview",
+        (
+          data: DrawPreviewData
+        ) => {
+
+          const {
+            roomId,
+            strokeId,
+            points,
+            color,
+            width,
+            eraser
+          } = data;
+
+          const userId =
+            socketUsers.get(
+              socket.id
+            );
+
+          if (!userId) {
+            return;
+          }
+
+          if (
+            typeof strokeId !== "string" ||
+            strokeId.length === 0
+          ) {
+            return;
+          }
+
+          if (!Array.isArray(points)) {
+            return;
+          }
+
+          if (points.length === 0) {
+            return;
+          }
+
+          // Preview messages are NOT stored in history.
+          //
+          // They are only forwarded to the other
+          // users in the same room.
+
+          socket
+            .to(roomId)
+            .emit(
+              "draw-preview",
+              {
+                userId,
+                strokeId,
+                points,
+                color,
+                width,
+                eraser
+              }
+            );
+        }
+      );
+
+      // =================================================
+      // FINAL COMMITTED DRAW
       // =================================================
 
       socket.on(
@@ -189,6 +270,7 @@ export function registerWebsocketHandlers(
 
           const {
             roomId,
+            strokeId,
             points,
             color,
             width,
@@ -212,6 +294,23 @@ export function registerWebsocketHandlers(
             return;
           }
 
+          /*
+           * IMPORTANT:
+           *
+           * Only the final "draw" event is added
+           * to the server's drawing history.
+           *
+           * All "draw-preview" events are temporary.
+           *
+           * This means:
+           *
+           * 1. Other users see the drawing immediately.
+           * 2. Undo removes the complete stroke.
+           * 3. Redo restores the complete stroke.
+           * 4. Preview chunks do not create separate
+           *    undo operations.
+           */
+
           const stroke =
             addStroke(
               roomId,
@@ -219,8 +318,12 @@ export function registerWebsocketHandlers(
               points,
               color,
               width,
-              eraser
+              eraser,
+              strokeId
             );
+
+          // Send the final committed stroke to
+          // the other users.
 
           socket
             .to(roomId)
@@ -228,6 +331,8 @@ export function registerWebsocketHandlers(
               "draw",
               {
                 userId,
+                strokeId:
+                  stroke.id,
                 points:
                   stroke.points,
                 color:
@@ -238,6 +343,17 @@ export function registerWebsocketHandlers(
                   stroke.eraser
               }
             );
+
+          // Send the authoritative canvas state
+          // to everyone so all clients stay synchronized.
+
+          io.to(roomId).emit(
+            "canvas-state",
+            {
+              strokes:
+                getStrokes(roomId)
+            }
+          );
         }
       );
 
@@ -371,11 +487,11 @@ export function registerWebsocketHandlers(
       // =================================================
 
       socket.on(
-        "ping-check",
+        "latency-ping",
         () => {
 
           socket.emit(
-            "pong-check"
+            "latency-pong"
           );
         }
       );

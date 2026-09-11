@@ -37,13 +37,18 @@ function getState(
   return state;
 }
 
+// =====================================================
+// ADD STROKE
+// =====================================================
+
 export function addStroke(
   roomId: string,
   userId: string,
   points: Point[],
   color: string,
   width: number,
-  eraser: boolean
+  eraser: boolean,
+  strokeId?: string
 ): Stroke {
 
   const state =
@@ -51,6 +56,7 @@ export function addStroke(
 
   const stroke: Stroke = {
     id:
+      strokeId ||
       `stroke-${Date.now()}-${Math.random()
         .toString(36)
         .substring(2, 9)}`,
@@ -73,10 +79,17 @@ export function addStroke(
     stroke
   );
 
+  // A new drawing operation invalidates
+  // the redo history.
+
   state.redo = [];
 
   return stroke;
 }
+
+// =====================================================
+// UNDO
+// =====================================================
 
 export function undo(
   roomId: string
@@ -99,6 +112,10 @@ export function undo(
   return stroke;
 }
 
+// =====================================================
+// REDO
+// =====================================================
+
 export function redo(
   roomId: string
 ): Stroke | null {
@@ -120,6 +137,10 @@ export function redo(
   return stroke;
 }
 
+// =====================================================
+// CLEAR
+// =====================================================
+
 export function clear(
   roomId: string
 ): void {
@@ -133,6 +154,10 @@ export function clear(
 
   state.strokes = [];
 }
+
+// =====================================================
+// GET STROKES
+// =====================================================
 
 export function getStrokes(
   roomId: string

@@ -1,5 +1,5 @@
 // =====================================================
-// COLLABORATIVE CANVAS TYPES
+// POINT
 // =====================================================
 
 export interface Point {
@@ -7,23 +7,20 @@ export interface Point {
   y: number;
 }
 
+// =====================================================
+// STROKE
+// =====================================================
+
 export interface Stroke {
+  id?: string;
+
+  userId?: string;
+
   points: Point[];
+
   color: string;
+
   width: number;
+
   eraser: boolean;
-}
-
-export interface CanvasState {
-  strokes: Stroke[];
-}
-
-export interface RoomInfo {
-  roomId: string;
-  userCount: number;
-}
-
-export interface ConnectionInfo {
-  connected: boolean;
-  latency: number;
 }

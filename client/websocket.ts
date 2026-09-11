@@ -125,12 +125,14 @@ export function joinRoom(
   roomId: string,
   userId: string
 ): void {
+
   // Remember the room.
   pendingRoomId = roomId;
   pendingUserId = userId;
 
   // If already connected, join immediately.
   if (socket.connected) {
+
     console.log(
       "Joining room:",
       roomId
@@ -149,23 +151,27 @@ export function joinRoom(
 
   // Otherwise the connect handler
   // will join automatically.
+
   console.log(
     "Waiting for socket connection..."
   );
 }
 
 // =====================================================
-// SEND STROKE
+// SEND FINAL COMMITTED STROKE
 // =====================================================
 
 export function sendStroke(
   roomId: string,
+  strokeId: string,
   points: Point[],
   color: string,
   width: number,
   eraser: boolean
 ): void {
+
   if (!socket.connected) {
+
     console.warn(
       "Cannot send stroke: socket not connected."
     );
@@ -177,6 +183,41 @@ export function sendStroke(
     "draw",
     {
       roomId,
+      strokeId,
+      points,
+      color,
+      width,
+      eraser,
+    }
+  );
+}
+
+// =====================================================
+// SEND REAL-TIME DRAWING PREVIEW
+// =====================================================
+
+export function sendDrawPreview(
+  roomId: string,
+  strokeId: string,
+  points: Point[],
+  color: string,
+  width: number,
+  eraser: boolean
+): void {
+
+  if (!socket.connected) {
+    return;
+  }
+
+  if (points.length === 0) {
+    return;
+  }
+
+  socket.emit(
+    "draw-preview",
+    {
+      roomId,
+      strokeId,
       points,
       color,
       width,
@@ -192,7 +233,9 @@ export function sendStroke(
 export function requestUndo(
   roomId: string
 ): void {
+
   if (!socket.connected) {
+
     console.warn(
       "Cannot undo: socket not connected."
     );
@@ -219,7 +262,9 @@ export function requestUndo(
 export function requestRedo(
   roomId: string
 ): void {
+
   if (!socket.connected) {
+
     console.warn(
       "Cannot redo: socket not connected."
     );
@@ -246,7 +291,9 @@ export function requestRedo(
 export function requestClear(
   roomId: string
 ): void {
+
   if (!socket.connected) {
+
     console.warn(
       "Cannot clear: socket not connected."
     );
@@ -275,6 +322,7 @@ export function sendCursorPosition(
   x: number,
   y: number
 ): void {
+
   if (!socket.connected) {
     return;
   }
@@ -299,6 +347,7 @@ export function onRoomJoined(
     userId: string;
   }) => void
 ): void {
+
   socket.on(
     "room-joined",
     callback
@@ -314,6 +363,7 @@ export function onUserJoined(
     userId: string;
   }) => void
 ): void {
+
   socket.on(
     "user-joined",
     callback
@@ -329,6 +379,7 @@ export function onCanvasState(
     strokes: Stroke[];
   }) => void
 ): void {
+
   socket.on(
     "canvas-state",
     callback
@@ -336,20 +387,43 @@ export function onCanvasState(
 }
 
 // =====================================================
-// REMOTE DRAWING
+// REMOTE FINAL DRAWING
 // =====================================================
 
 export function onRemoteDrawing(
   callback: (data: {
     userId: string;
+    strokeId?: string;
     points: Point[];
     color: string;
     width: number;
     eraser: boolean;
   }) => void
 ): void {
+
   socket.on(
     "draw",
+    callback
+  );
+}
+
+// =====================================================
+// REMOTE REAL-TIME DRAWING PREVIEW
+// =====================================================
+
+export function onRemoteDrawPreview(
+  callback: (data: {
+    userId: string;
+    strokeId: string;
+    points: Point[];
+    color: string;
+    width: number;
+    eraser: boolean;
+  }) => void
+): void {
+
+  socket.on(
+    "draw-preview",
     callback
   );
 }
@@ -365,6 +439,7 @@ export function onRemoteCursor(
     y: number;
   }) => void
 ): void {
+
   socket.on(
     "cursor-move",
     callback
@@ -380,6 +455,7 @@ export function onUserCount(
     count: number;
   }) => void
 ): void {
+
   socket.on(
     "user-count",
     callback
@@ -393,6 +469,7 @@ export function onUserCount(
 export function onRemoteClear(
   callback: () => void
 ): void {
+
   socket.on(
     "clear",
     callback
@@ -406,6 +483,7 @@ export function onRemoteClear(
 export function onLatency(
   callback: (latency: number) => void
 ): void {
+
   latencyCallback = callback;
 }
 
@@ -414,7 +492,9 @@ export function onLatency(
 // =====================================================
 
 export function checkLatency(): void {
+
   if (!socket.connected) {
+
     console.warn(
       "Cannot check latency: socket not connected."
     );
@@ -426,7 +506,7 @@ export function checkLatency(): void {
     Date.now();
 
   socket.emit(
-    "ping-check"
+    "latency-ping"
   );
 }
 
@@ -435,8 +515,9 @@ export function checkLatency(): void {
 // =====================================================
 
 socket.on(
-  "pong-check",
+  "latency-pong",
   () => {
+
     if (
       latencyStartTime === 0
     ) {
@@ -456,6 +537,7 @@ socket.on(
     );
 
     if (latencyCallback) {
+
       latencyCallback(
         latency
       );
@@ -469,6 +551,7 @@ socket.on(
 
 export function getSocketId():
   string | undefined {
+
   return socket.id;
 }
 
@@ -478,5 +561,6 @@ export function getSocketId():
 
 export function isSocketConnected():
   boolean {
+
   return socket.connected;
 }

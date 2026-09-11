@@ -5,43 +5,64 @@ import type { Point, Stroke } from "./types";
 // =====================================================
 
 let canvas: HTMLCanvasElement | null = null;
-
 let ctx: CanvasRenderingContext2D | null = null;
 
 let isDrawing = false;
-
 let currentStroke: Point[] = [];
 
 let currentColor = "#111111";
-
 let currentWidth = 5;
-
 let isEraser = false;
 
 let canvasStrokes: Stroke[] = [];
 
 // =====================================================
-// DRAW CALLBACK
+// REAL-TIME PREVIEW VARIABLES
+// =====================================================
+
+let currentStrokeId: string | null = null;
+
+let lastPreviewSentIndex = 0;
+let previewTimer: number | null = null;
+
+const PREVIEW_INTERVAL = 25;
+
+// Temporary remote previews.
+// These are NOT committed strokes.
+// Therefore they are NOT part of undo/redo.
+const remotePreviews = new Map<string, Stroke>();
+
+// =====================================================
+// CALLBACK TYPES
 // =====================================================
 
 type DrawCallback = (
+  strokeId: string,
   points: Point[],
   color: string,
   width: number,
   eraser: boolean
 ) => void;
 
-let drawCallback: DrawCallback | null = null;
-
-// =====================================================
-// CURSOR CALLBACK
-// =====================================================
+type DrawPreviewCallback = (
+  strokeId: string,
+  points: Point[],
+  color: string,
+  width: number,
+  eraser: boolean
+) => void;
 
 type CursorCallback = (
   x: number,
   y: number
 ) => void;
 
+// =====================================================
+// CALLBACK VARIABLES
+// =====================================================
+
+let drawCallback: DrawCallback | null = null;
+let drawPreviewCallback: DrawPreviewCallback | null = null;
 let cursorCallback: CursorCallback | null = null;
 
 // =====================================================
@@ -52,6 +73,16 @@ export function setDrawCallback(
   callback: DrawCallback
 ): void {
   drawCallback = callback;
+}
+
+// =====================================================
+// SET DRAW PREVIEW CALLBACK
+// =====================================================
+
+export function setDrawPreviewCallback(
+  callback: DrawPreviewCallback
+): void {
+  drawPreviewCallback = callback;
 }
 
 // =====================================================
@@ -71,11 +102,9 @@ export function setCursorCallback(
 export function setupCanvas(
   canvasElement: HTMLCanvasElement
 ): void {
-
   canvas = canvasElement;
 
-  const context =
-    canvas.getContext("2d");
+  const context = canvas.getContext("2d");
 
   if (!context) {
     throw new Error(
@@ -86,16 +115,12 @@ export function setupCanvas(
   ctx = context;
 
   canvas.style.touchAction = "none";
-
   canvas.style.userSelect = "none";
-
   canvas.style.webkitUserSelect = "none";
 
   resizeCanvas();
 
-  // Remove duplicate listeners if setupCanvas
-  // is accidentally called more than once.
-
+  // Prevent duplicate event listeners.
   canvas.removeEventListener(
     "pointerdown",
     handlePointerDown
@@ -158,7 +183,6 @@ export function setupCanvas(
 // =====================================================
 
 function resizeCanvas(): void {
-
   if (!canvas || !ctx) {
     return;
   }
@@ -166,33 +190,28 @@ function resizeCanvas(): void {
   const rect =
     canvas.getBoundingClientRect();
 
-  const width =
-    Math.max(
-      1,
-      Math.round(rect.width)
-    );
+  const width = Math.max(
+    1,
+    Math.round(rect.width)
+  );
 
-  const height =
-    Math.max(
-      1,
-      Math.round(rect.height)
-    );
+  const height = Math.max(
+    1,
+    Math.round(rect.height)
+  );
 
-  // Save existing drawing
-  // before resizing.
-
-  const oldStrokes = [
-    ...canvasStrokes
-  ];
+  // Avoid unnecessary canvas resets.
+  if (
+    canvas.width === width &&
+    canvas.height === height
+  ) {
+    return;
+  }
 
   canvas.width = width;
-
   canvas.height = height;
 
-  canvasStrokes = oldStrokes;
-
   updateContext();
-
   redrawCanvas();
 }
 
@@ -203,7 +222,6 @@ function resizeCanvas(): void {
 function getPoint(
   event: PointerEvent
 ): Point {
-
   if (!canvas) {
     return {
       x: 0,
@@ -236,25 +254,21 @@ function getPoint(
 // =====================================================
 
 function updateContext(): void {
-
   if (!ctx) {
     return;
   }
 
   ctx.lineCap = "round";
-
   ctx.lineJoin = "round";
-
-  ctx.lineWidth =
-    currentWidth;
+  ctx.lineWidth = currentWidth;
 
   if (isEraser) {
-
     ctx.globalCompositeOperation =
       "destination-out";
 
+    ctx.strokeStyle =
+      "rgba(0,0,0,1)";
   } else {
-
     ctx.globalCompositeOperation =
       "source-over";
 
@@ -264,19 +278,29 @@ function updateContext(): void {
 }
 
 // =====================================================
+// CREATE STROKE ID
+// =====================================================
+
+function createStrokeId(): string {
+  return (
+    `stroke-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`
+  );
+}
+
+// =====================================================
 // POINTER DOWN
 // =====================================================
 
 function handlePointerDown(
   event: PointerEvent
 ): void {
-
   if (!canvas || !ctx) {
     return;
   }
 
-  // Only use the primary mouse button.
-
+  // Only accept the primary mouse button.
   if (
     event.pointerType === "mouse" &&
     event.button !== 0
@@ -290,7 +314,6 @@ function handlePointerDown(
     getPoint(event);
 
   // Send cursor position immediately.
-
   if (cursorCallback) {
     cursorCallback(
       point.x,
@@ -300,59 +323,43 @@ function handlePointerDown(
 
   isDrawing = true;
 
-  currentStroke = [];
+  currentStroke = [point];
 
-  currentStroke.push(point);
+  currentStrokeId =
+    createStrokeId();
+
+  lastPreviewSentIndex = 0;
+
+  if (previewTimer !== null) {
+    window.clearTimeout(
+      previewTimer
+    );
+
+    previewTimer = null;
+  }
 
   updateContext();
 
-  // Keep receiving pointer events
-  // while the mouse button is held.
-
+  // Capture the pointer so drawing continues
+  // even if the pointer leaves the canvas.
   try {
-
     canvas.setPointerCapture(
       event.pointerId
     );
-
   } catch {
-    // Ignore browsers that do not
-    // support pointer capture.
+    // Some browsers may not support
+    // pointer capture.
   }
 
-  // Draw starting dot.
-
-  ctx.beginPath();
-
-  ctx.arc(
-    point.x,
-    point.y,
-    Math.max(
-      1,
-      currentWidth / 2
-    ),
-    0,
-    Math.PI * 2
+  // Draw the initial point immediately.
+  drawPoint(
+    point,
+    currentColor,
+    currentWidth,
+    isEraser
   );
 
-  if (isEraser) {
-
-    ctx.globalCompositeOperation =
-      "destination-out";
-
-  } else {
-
-    ctx.globalCompositeOperation =
-      "source-over";
-
-    ctx.fillStyle =
-      currentColor;
-  }
-
-  ctx.fill();
-
-  // Start line from this point.
-
+  // Start a new path.
   ctx.beginPath();
 
   ctx.moveTo(
@@ -368,7 +375,6 @@ function handlePointerDown(
 function handlePointerMove(
   event: PointerEvent
 ): void {
-
   if (!canvas) {
     return;
   }
@@ -376,10 +382,7 @@ function handlePointerMove(
   const point =
     getPoint(event);
 
-  // ===================================================
-  // SEND CURSOR POSITION
-  // ===================================================
-
+  // Always update cursor position.
   if (cursorCallback) {
     cursorCallback(
       point.x,
@@ -387,10 +390,7 @@ function handlePointerMove(
     );
   }
 
-  // ===================================================
-  // DRAW ONLY WHEN MOUSE IS DOWN
-  // ===================================================
-
+  // Do not draw unless pointer is down.
   if (
     !isDrawing ||
     !ctx
@@ -404,6 +404,18 @@ function handlePointerMove(
 
   updateContext();
 
+  ctx.beginPath();
+
+  ctx.moveTo(
+    currentStroke[
+      currentStroke.length - 2
+    ]?.x ?? point.x,
+
+    currentStroke[
+      currentStroke.length - 2
+    ]?.y ?? point.y
+  );
+
   ctx.lineTo(
     point.x,
     point.y
@@ -411,11 +423,152 @@ function handlePointerMove(
 
   ctx.stroke();
 
-  ctx.beginPath();
+  // Send a real-time preview batch.
+  schedulePreviewSend();
+}
 
-  ctx.moveTo(
-    point.x,
-    point.y
+// =====================================================
+// SCHEDULE PREVIEW SEND
+// =====================================================
+
+function schedulePreviewSend(): void {
+  if (
+    !isDrawing ||
+    !currentStrokeId ||
+    !drawPreviewCallback
+  ) {
+    return;
+  }
+
+  if (previewTimer !== null) {
+    return;
+  }
+
+  previewTimer =
+    window.setTimeout(
+      () => {
+        previewTimer = null;
+
+        sendPreviewPoints();
+      },
+      PREVIEW_INTERVAL
+    );
+}
+
+// =====================================================
+// SEND PREVIEW POINTS
+// =====================================================
+
+function sendPreviewPoints(): void {
+  if (
+    !isDrawing ||
+    !currentStrokeId ||
+    !drawPreviewCallback
+  ) {
+    return;
+  }
+
+  const newPoints =
+    currentStroke.slice(
+      lastPreviewSentIndex
+    );
+
+  if (newPoints.length === 0) {
+    return;
+  }
+
+  let previewPoints: Point[];
+
+  // Include the previous point so separate
+  // batches connect smoothly.
+  if (
+    lastPreviewSentIndex > 0
+  ) {
+    const previousPoint =
+      currentStroke[
+        lastPreviewSentIndex - 1
+      ];
+
+    previewPoints = [
+      previousPoint,
+      ...newPoints
+    ];
+  } else {
+    previewPoints = [
+      ...newPoints
+    ];
+  }
+
+  lastPreviewSentIndex =
+    currentStroke.length;
+
+  drawPreviewCallback(
+    currentStrokeId,
+    previewPoints,
+    currentColor,
+    currentWidth,
+    isEraser
+  );
+}
+
+// =====================================================
+// FLUSH FINAL PREVIEW
+// =====================================================
+
+function flushPreviewSend(): void {
+  if (previewTimer !== null) {
+    window.clearTimeout(
+      previewTimer
+    );
+
+    previewTimer = null;
+  }
+
+  if (
+    !currentStrokeId ||
+    !drawPreviewCallback
+  ) {
+    return;
+  }
+
+  const remainingPoints =
+    currentStroke.slice(
+      lastPreviewSentIndex
+    );
+
+  if (remainingPoints.length === 0) {
+    return;
+  }
+
+  let previewPoints: Point[];
+
+  if (
+    lastPreviewSentIndex > 0
+  ) {
+    const previousPoint =
+      currentStroke[
+        lastPreviewSentIndex - 1
+      ];
+
+    previewPoints = [
+      previousPoint,
+      ...remainingPoints
+    ];
+  } else {
+    previewPoints = [
+      ...remainingPoints
+    ];
+  }
+
+  lastPreviewSentIndex =
+    currentStroke.length;
+
+  drawPreviewCallback(
+    currentStrokeId,
+    previewPoints,
+    currentColor,
+    currentWidth,
+    isEraser
   );
 }
 
@@ -426,23 +579,26 @@ function handlePointerMove(
 function handlePointerUp(
   event: PointerEvent
 ): void {
-
   if (!isDrawing) {
     return;
   }
 
   event.preventDefault();
 
-  isDrawing = false;
+  // Send any remaining preview points first.
+  flushPreviewSend();
 
-  // Finish current stroke.
+  const completedStrokeId =
+    currentStrokeId;
 
+  // Commit the complete stroke exactly once.
   if (
     currentStroke.length > 0 &&
-    drawCallback
+    drawCallback &&
+    completedStrokeId
   ) {
-
     drawCallback(
+      completedStrokeId,
       [...currentStroke],
       currentColor,
       currentWidth,
@@ -450,7 +606,21 @@ function handlePointerUp(
     );
   }
 
+  isDrawing = false;
+
   currentStroke = [];
+
+  currentStrokeId = null;
+
+  lastPreviewSentIndex = 0;
+
+  if (previewTimer !== null) {
+    window.clearTimeout(
+      previewTimer
+    );
+
+    previewTimer = null;
+  }
 
   if (ctx) {
     ctx.beginPath();
@@ -462,13 +632,10 @@ function handlePointerUp(
       event.pointerId
     )
   ) {
-
     try {
-
       canvas.releasePointerCapture(
         event.pointerId
       );
-
     } catch {
       // Ignore release errors.
     }
@@ -482,25 +649,38 @@ function handlePointerUp(
 export function setCanvasState(
   strokes: Stroke[]
 ): void {
-
   canvasStrokes =
     strokes.map(
       (stroke) => ({
         ...stroke,
-
         points: [
           ...stroke.points
         ]
       })
     );
 
-  redrawCanvas();
+  // Remove only previews that have now
+  // become committed strokes.
+  if (strokes.length === 0) {
+    // Empty authoritative state means
+    // the room was globally cleared.
+    remotePreviews.clear();
+  } else {
+    for (
+      const stroke of strokes
+    ) {
+      if (
+        stroke.userId &&
+        stroke.id
+      ) {
+        remotePreviews.delete(
+          `${stroke.userId}:${stroke.id}`
+        );
+      }
+    }
+  }
 
-  console.log(
-    "Canvas state:",
-    canvasStrokes.length,
-    "strokes"
-  );
+  redrawCanvas();
 }
 
 // =====================================================
@@ -510,14 +690,36 @@ export function setCanvasState(
 export function addRemoteStroke(
   stroke: Stroke
 ): void {
+  // Prevent duplicate committed strokes.
+  if (stroke.id) {
+    const alreadyExists =
+      canvasStrokes.some(
+        (existingStroke) =>
+          existingStroke.id ===
+          stroke.id
+      );
+
+    if (alreadyExists) {
+      return;
+    }
+  }
 
   canvasStrokes.push({
     ...stroke,
-
     points: [
       ...stroke.points
     ]
   });
+
+  // Remove matching temporary preview.
+  if (
+    stroke.userId &&
+    stroke.id
+  ) {
+    remotePreviews.delete(
+      `${stroke.userId}:${stroke.id}`
+    );
+  }
 
   redrawCanvas();
 }
@@ -532,16 +734,16 @@ export function drawRemoteStroke(
   width: number,
   eraser = false
 ): void {
+  if (points.length === 0) {
+    return;
+  }
 
   const stroke: Stroke = {
     points: [
       ...points
     ],
-
     color,
-
     width,
-
     eraser
   };
 
@@ -549,12 +751,94 @@ export function drawRemoteStroke(
 }
 
 // =====================================================
+// DRAW REMOTE PREVIEW
+// =====================================================
+
+export function drawRemotePreview(
+  userId: string,
+  strokeId: string,
+  points: Point[],
+  color: string,
+  width: number,
+  eraser = false
+): void {
+  if (
+    !userId ||
+    !strokeId ||
+    points.length === 0
+  ) {
+    return;
+  }
+
+  const previewKey =
+    `${userId}:${strokeId}`;
+
+  const existing =
+    remotePreviews.get(
+      previewKey
+    );
+
+  if (existing) {
+    const lastExistingPoint =
+      existing.points[
+        existing.points.length - 1
+      ];
+
+    const firstNewPoint =
+      points[0];
+
+    let pointsToAdd =
+      points;
+
+    // The first point of each batch may be
+    // the previous batch's final point.
+    if (
+      lastExistingPoint &&
+      firstNewPoint &&
+      lastExistingPoint.x ===
+        firstNewPoint.x &&
+      lastExistingPoint.y ===
+        firstNewPoint.y
+    ) {
+      pointsToAdd =
+        points.slice(1);
+    }
+
+    existing.points.push(
+      ...pointsToAdd
+    );
+
+    // Keep the latest drawing settings.
+    existing.color = color;
+    existing.width = width;
+    existing.eraser = eraser;
+  } else {
+    remotePreviews.set(
+      previewKey,
+      {
+        id: strokeId,
+        userId,
+        points: [
+          ...points
+        ],
+        color,
+        width,
+        eraser
+      }
+    );
+  }
+
+  redrawCanvas();
+}
+
+// =====================================================
 // CLEAR CANVAS
 // =====================================================
 
 export function clearCanvas(): void {
-
   canvasStrokes = [];
+
+  remotePreviews.clear();
 
   redrawCanvas();
 }
@@ -564,7 +848,6 @@ export function clearCanvas(): void {
 // =====================================================
 
 function redrawCanvas(): void {
-
   if (!ctx || !canvas) {
     return;
   }
@@ -576,24 +859,79 @@ function redrawCanvas(): void {
     canvas.height
   );
 
+  // Draw committed strokes first.
   for (
     const stroke of canvasStrokes
   ) {
-
     drawStroke(stroke);
+  }
+
+  // Draw temporary remote previews on top.
+  for (
+    const preview of
+      remotePreviews.values()
+  ) {
+    drawStroke(preview);
   }
 
   updateContext();
 }
 
 // =====================================================
-// DRAW SAVED STROKE
+// DRAW POINT
+// =====================================================
+
+function drawPoint(
+  point: Point,
+  color: string,
+  width: number,
+  eraser: boolean
+): void {
+  if (!ctx) {
+    return;
+  }
+
+  ctx.save();
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = width;
+
+  if (eraser) {
+    ctx.globalCompositeOperation =
+      "destination-out";
+  } else {
+    ctx.globalCompositeOperation =
+      "source-over";
+
+    ctx.fillStyle = color;
+  }
+
+  ctx.beginPath();
+
+  ctx.arc(
+    point.x,
+    point.y,
+    Math.max(
+      1,
+      width / 2
+    ),
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// =====================================================
+// DRAW SAVED / PREVIEW STROKE
 // =====================================================
 
 function drawStroke(
   stroke: Stroke
 ): void {
-
   if (
     !ctx ||
     stroke.points.length === 0
@@ -604,23 +942,24 @@ function drawStroke(
   ctx.save();
 
   ctx.lineCap = "round";
-
   ctx.lineJoin = "round";
-
   ctx.lineWidth =
-    stroke.width;
+    Math.max(
+      1,
+      stroke.width
+    );
 
   if (stroke.eraser) {
-
     ctx.globalCompositeOperation =
       "destination-out";
-
   } else {
-
     ctx.globalCompositeOperation =
       "source-over";
 
     ctx.strokeStyle =
+      stroke.color;
+
+    ctx.fillStyle =
       stroke.color;
   }
 
@@ -634,7 +973,6 @@ function drawStroke(
   if (
     stroke.points.length === 1
   ) {
-
     ctx.beginPath();
 
     ctx.arc(
@@ -647,12 +985,6 @@ function drawStroke(
       0,
       Math.PI * 2
     );
-
-    if (!stroke.eraser) {
-
-      ctx.fillStyle =
-        stroke.color;
-    }
 
     ctx.fill();
 
@@ -677,7 +1009,6 @@ function drawStroke(
     i < stroke.points.length;
     i++
   ) {
-
     const point =
       stroke.points[i];
 
@@ -699,7 +1030,6 @@ function drawStroke(
 export function setColor(
   color: string
 ): void {
-
   currentColor = color;
 
   isEraser = false;
@@ -714,11 +1044,10 @@ export function setColor(
 export function setStrokeWidth(
   width: number
 ): void {
-
   currentWidth =
     Math.max(
       1,
-      width
+      Number(width) || 1
     );
 
   updateContext();
@@ -729,7 +1058,6 @@ export function setStrokeWidth(
 // =====================================================
 
 export function enableBrush(): void {
-
   isEraser = false;
 
   updateContext();
@@ -740,7 +1068,6 @@ export function enableBrush(): void {
 // =====================================================
 
 export function enableEraser(): void {
-
   isEraser = true;
 
   updateContext();

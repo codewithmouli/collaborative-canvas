@@ -6,11 +6,16 @@ import {
   enableEraser,
   setCanvasState,
   setDrawCallback,
+  setDrawPreviewCallback,
+  setCursorCallback,
+  drawRemotePreview,
 } from "./canvas";
 
 import {
   joinRoom,
   sendStroke,
+  sendDrawPreview,
+  sendCursorPosition,
   requestUndo,
   requestRedo,
   requestClear,
@@ -19,6 +24,8 @@ import {
   onUserCount,
   onConnectionChange,
   onRemoteDrawing,
+  onRemoteDrawPreview,
+  onRemoteCursor,
   checkLatency,
   onLatency,
 } from "./websocket";
@@ -118,23 +125,33 @@ const latencyElement =
 // =====================================================
 
 if (!canvas) {
-  throw new Error("drawing-canvas not found");
+  throw new Error(
+    "drawing-canvas not found"
+  );
 }
 
 if (!brushButton) {
-  throw new Error("brush-tool not found");
+  throw new Error(
+    "brush-tool not found"
+  );
 }
 
 if (!eraserButton) {
-  throw new Error("eraser-tool not found");
+  throw new Error(
+    "eraser-tool not found"
+  );
 }
 
 if (!colorPicker) {
-  throw new Error("color-picker not found");
+  throw new Error(
+    "color-picker not found"
+  );
 }
 
 if (!strokeWidth) {
-  throw new Error("stroke-width not found");
+  throw new Error(
+    "stroke-width not found"
+  );
 }
 
 if (!strokeWidthValue) {
@@ -144,19 +161,27 @@ if (!strokeWidthValue) {
 }
 
 if (!undoButton) {
-  throw new Error("undo-button not found");
+  throw new Error(
+    "undo-button not found"
+  );
 }
 
 if (!redoButton) {
-  throw new Error("redo-button not found");
+  throw new Error(
+    "redo-button not found"
+  );
 }
 
 if (!clearButton) {
-  throw new Error("clear-button not found");
+  throw new Error(
+    "clear-button not found"
+  );
 }
 
 if (!roomElement) {
-  throw new Error("room-id not found");
+  throw new Error(
+    "room-id not found"
+  );
 }
 
 if (!connectionStatus) {
@@ -184,6 +209,265 @@ if (!latencyElement) {
 roomElement.textContent = roomId;
 
 // =====================================================
+// REMOTE CURSOR SYSTEM
+// =====================================================
+
+// Store remote cursor elements by user ID.
+const remoteCursors =
+  new Map<string, HTMLDivElement>();
+
+// Remove inactive cursor after this amount of time.
+const CURSOR_TIMEOUT = 3000;
+
+const cursorTimers =
+  new Map<string, number>();
+
+// =====================================================
+// USER CURSOR COLOR
+// =====================================================
+
+function getUserCursorColor(
+  remoteUserId: string
+): string {
+  const colors = [
+    "#e63946",
+    "#457b9d",
+    "#2a9d8f",
+    "#f4a261",
+    "#9b5de5",
+    "#00b4d8",
+    "#f72585",
+    "#43aa8b",
+  ];
+
+  let hash = 0;
+
+  for (
+    let i = 0;
+    i < remoteUserId.length;
+    i++
+  ) {
+    hash =
+      (
+        hash * 31 +
+        remoteUserId.charCodeAt(i)
+      ) >>> 0;
+  }
+
+  return colors[
+    hash % colors.length
+  ];
+}
+
+// =====================================================
+// CREATE REMOTE CURSOR
+// =====================================================
+
+function createRemoteCursor(
+  remoteUserId: string
+): HTMLDivElement {
+  const cursor =
+    document.createElement("div");
+
+  const color =
+    getUserCursorColor(
+      remoteUserId
+    );
+
+  cursor.className =
+    "remote-user-cursor";
+
+  cursor.style.position =
+    "fixed";
+
+  cursor.style.width =
+    "0px";
+
+  cursor.style.height =
+    "0px";
+
+  cursor.style.zIndex =
+    "9999";
+
+  cursor.style.pointerEvents =
+    "none";
+
+  cursor.style.transform =
+    "translate(-2px, -2px)";
+
+  cursor.innerHTML = `
+    <div
+      style="
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 16px solid ${color};
+        transform: rotate(-45deg);
+        transform-origin: center;
+      "
+    ></div>
+
+    <div
+      style="
+        position: absolute;
+        left: 10px;
+        top: 10px;
+        padding: 3px 7px;
+        border-radius: 8px;
+        background: ${color};
+        color: white;
+        font-family: Arial, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      "
+    >
+      ${remoteUserId}
+    </div>
+  `;
+
+  document.body.appendChild(
+    cursor
+  );
+
+  return cursor;
+}
+
+// =====================================================
+// SHOW REMOTE CURSOR
+// =====================================================
+
+function showRemoteCursor(
+  remoteUserId: string,
+  x: number,
+  y: number
+): void {
+  if (
+    remoteUserId === userId
+  ) {
+    return;
+  }
+
+  if (!canvas) {
+    return;
+  }
+
+  let cursor =
+    remoteCursors.get(
+      remoteUserId
+    );
+
+  if (!cursor) {
+    cursor =
+      createRemoteCursor(
+        remoteUserId
+      );
+
+    remoteCursors.set(
+      remoteUserId,
+      cursor
+    );
+  }
+
+  const rect =
+    canvas.getBoundingClientRect();
+
+  if (
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    return;
+  }
+
+  const scaleX =
+    rect.width / canvas.width;
+
+  const scaleY =
+    rect.height / canvas.height;
+
+  const screenX =
+    rect.left +
+    x * scaleX;
+
+  const screenY =
+    rect.top +
+    y * scaleY;
+
+  cursor.style.left =
+    `${screenX}px`;
+
+  cursor.style.top =
+    `${screenY}px`;
+
+  cursor.style.display =
+    "block";
+
+  // Reset the hide timer.
+  const oldTimer =
+    cursorTimers.get(
+      remoteUserId
+    );
+
+  if (oldTimer !== undefined) {
+    window.clearTimeout(
+      oldTimer
+    );
+  }
+
+  const newTimer =
+    window.setTimeout(
+      () => {
+        cursor.style.display =
+          "none";
+      },
+      CURSOR_TIMEOUT
+    );
+
+  cursorTimers.set(
+    remoteUserId,
+    newTimer
+  );
+}
+
+// =====================================================
+// REMOVE REMOTE CURSOR
+// =====================================================
+
+function removeRemoteCursor(
+  remoteUserId: string
+): void {
+  const cursor =
+    remoteCursors.get(
+      remoteUserId
+    );
+
+  if (cursor) {
+    cursor.remove();
+
+    remoteCursors.delete(
+      remoteUserId
+    );
+  }
+
+  const timer =
+    cursorTimers.get(
+      remoteUserId
+    );
+
+  if (timer !== undefined) {
+    window.clearTimeout(
+      timer
+    );
+
+    cursorTimers.delete(
+      remoteUserId
+    );
+  }
+}
+
+// =====================================================
 // INITIAL CANVAS SETUP
 // =====================================================
 
@@ -197,10 +481,14 @@ console.log(
 // DEFAULT DRAWING SETTINGS
 // =====================================================
 
-setColor(colorPicker.value);
+setColor(
+  colorPicker.value
+);
 
 setStrokeWidth(
-  Number(strokeWidth.value)
+  Number(
+    strokeWidth.value
+  )
 );
 
 enableBrush();
@@ -214,6 +502,20 @@ eraserButton.classList.remove(
 );
 
 // =====================================================
+// LOCAL CURSOR POSITION
+// =====================================================
+
+setCursorCallback(
+  (x, y) => {
+    sendCursorPosition(
+      roomId,
+      x,
+      y
+    );
+  }
+);
+
+// =====================================================
 // CONNECTION STATUS
 // =====================================================
 
@@ -221,9 +523,7 @@ let roomJoined = false;
 
 onConnectionChange(
   (connected) => {
-
     if (connected) {
-
       connectionStatus.textContent =
         "Connected";
 
@@ -239,18 +539,13 @@ onConnectionChange(
         "Connected to server."
       );
 
-      // Join the room only after
-      // the socket is connected.
       if (!roomJoined) {
-
         joinRoom(
           roomId,
           userId
         );
       }
-
     } else {
-
       connectionStatus.textContent =
         "Disconnected";
 
@@ -277,7 +572,6 @@ onConnectionChange(
 
 onRoomJoined(
   (data) => {
-
     console.log(
       "Room joined:",
       data
@@ -304,7 +598,6 @@ onRoomJoined(
 
 onCanvasState(
   (data) => {
-
     console.log(
       "Canvas state received:",
       data.strokes.length,
@@ -318,12 +611,11 @@ onCanvasState(
 );
 
 // =====================================================
-// REMOTE DRAWING
+// REMOTE FINAL DRAWING
 // =====================================================
 
 onRemoteDrawing(
   (data) => {
-
     console.log(
       "Remote drawing received:",
       data.points.length,
@@ -331,12 +623,43 @@ onRemoteDrawing(
     );
 
     /*
-     * The server sends the complete canvas
-     * state after drawing changes.
+     * The final committed stroke is handled
+     * through the authoritative canvas state
+     * sent by the server.
      *
-     * Therefore setCanvasState()
-     * handles the actual redraw.
+     * This keeps undo/redo globally synchronized.
      */
+  }
+);
+
+// =====================================================
+// REMOTE REAL-TIME DRAWING PREVIEW
+// =====================================================
+
+onRemoteDrawPreview(
+  (data) => {
+    drawRemotePreview(
+      data.userId,
+      data.strokeId,
+      data.points,
+      data.color,
+      data.width,
+      data.eraser
+    );
+  }
+);
+
+// =====================================================
+// REMOTE CURSOR
+// =====================================================
+
+onRemoteCursor(
+  (data) => {
+    showRemoteCursor(
+      data.userId,
+      data.x,
+      data.y
+    );
   }
 );
 
@@ -346,7 +669,6 @@ onRemoteDrawing(
 
 onUserCount(
   (data) => {
-
     usersElement.textContent =
       `Users: ${data.count}`;
 
@@ -354,29 +676,85 @@ onUserCount(
       "Users:",
       data.count
     );
+
+    // If there is only one user,
+    // old remote cursors are no longer needed.
+    if (data.count <= 1) {
+      for (
+        const remoteUserId of
+          remoteCursors.keys()
+      ) {
+        removeRemoteCursor(
+          remoteUserId
+        );
+      }
+    }
   }
 );
 
 // =====================================================
-// DRAW CALLBACK
+// FINAL DRAW CALLBACK
 // =====================================================
 
 setDrawCallback(
   (
+    strokeId,
     points,
     color,
     width,
     eraser
   ) => {
-
     console.log(
       "Stroke created:",
+      strokeId,
       points.length,
       "points"
     );
 
+    /*
+     * Send ONE final committed stroke.
+     *
+     * Preview points are not stored in
+     * the server history.
+     *
+     * Therefore one complete user action
+     * remains one undo/redo operation.
+     */
+
     sendStroke(
       roomId,
+      strokeId,
+      points,
+      color,
+      width,
+      eraser
+    );
+  }
+);
+
+// =====================================================
+// REAL-TIME PREVIEW CALLBACK
+// =====================================================
+
+setDrawPreviewCallback(
+  (
+    strokeId,
+    points,
+    color,
+    width,
+    eraser
+  ) => {
+    /*
+     * Preview data is sent while the user
+     * is actively drawing.
+     *
+     * The server forwards it to other users
+     * but does not add it to history.
+     */
+
+    sendDrawPreview(
+      roomId,
+      strokeId,
       points,
       color,
       width,
@@ -392,7 +770,6 @@ setDrawCallback(
 brushButton.addEventListener(
   "click",
   () => {
-
     enableBrush();
 
     brushButton.classList.add(
@@ -416,7 +793,6 @@ brushButton.addEventListener(
 eraserButton.addEventListener(
   "click",
   () => {
-
     enableEraser();
 
     eraserButton.classList.add(
@@ -440,7 +816,6 @@ eraserButton.addEventListener(
 colorPicker.addEventListener(
   "input",
   () => {
-
     setColor(
       colorPicker.value
     );
@@ -469,7 +844,6 @@ colorPicker.addEventListener(
 strokeWidth.addEventListener(
   "input",
   () => {
-
     const width =
       Number(
         strokeWidth.value
@@ -496,7 +870,6 @@ strokeWidth.addEventListener(
 undoButton.addEventListener(
   "click",
   () => {
-
     console.log(
       "Undo requested."
     );
@@ -514,7 +887,6 @@ undoButton.addEventListener(
 redoButton.addEventListener(
   "click",
   () => {
-
     console.log(
       "Redo requested."
     );
@@ -532,7 +904,6 @@ redoButton.addEventListener(
 clearButton.addEventListener(
   "click",
   () => {
-
     const confirmed =
       window.confirm(
         "Clear the entire canvas?"
@@ -558,7 +929,6 @@ clearButton.addEventListener(
 
 onLatency(
   (latency) => {
-
     latencyElement.textContent =
       `Latency: ${latency} ms`;
 
@@ -576,18 +946,14 @@ onLatency(
 
 setTimeout(
   () => {
-
     checkLatency();
-
   },
   1500
 );
 
 setInterval(
   () => {
-
     checkLatency();
-
   },
   5000
 );

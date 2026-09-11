@@ -1,94 +1,100 @@
-\# Collaborative Canvas
+# Real-Time Collaborative Drawing Canvas
 
+A real-time collaborative drawing application where multiple users can join the same room and draw together on a shared HTML5 Canvas.
 
+The application uses Socket.IO WebSockets to synchronize drawing activity, cursor positions, user counts, and canvas operations between connected users.
 
-A real-time collaborative drawing canvas where multiple users can draw together on the same canvas.
+---
 
+## Features
 
+### Drawing
 
-\## Features
+- Real-time collaborative drawing
+- Brush tool
+- Eraser tool
+- Color selection
+- Adjustable stroke width
+- Smooth pointer-based drawing
+- Real-time drawing previews while users are actively drawing
 
+### Collaboration
 
+- Multiple users can draw simultaneously
+- Room-based collaboration
+- Remote user cursor indicators
+- Online user count
+- User-specific cursor colors
+- Real-time Socket.IO communication
 
-\- Real-time collaborative drawing
+### Canvas Operations
 
-\- Multiple users can draw simultaneously
+- Global Undo
+- Global Redo
+- Global Clear
+- Authoritative server-side canvas state
+- Canvas state synchronization when joining or reloading a room
 
-\- Brush tool
+### Connection
 
-\- Eraser tool
+- Connection status indicator
+- Network latency measurement
+- Automatic synchronization of committed drawing state
 
-\- Color selection
+---
 
-\- Brush size control
+## Technologies Used
 
-\- Undo and Redo
+### Frontend
 
-\- Clear canvas
+- HTML5
+- CSS
+- TypeScript
+- HTML5 Canvas API
+- Socket.IO Client
+- Vite
 
-\- Room-based collaboration
+### Backend
 
-\- Connection status indicator
+- Node.js
+- TypeScript
+- Express
+- Socket.IO
 
-\- Socket.IO real-time communication
+### Communication
 
+- WebSockets through Socket.IO
 
+### State Management
 
-\## Technologies Used
+- In-memory server-side drawing state
 
+---
 
-
-\- React
-
-\- TypeScript
-
-\- Vite
-
-\- Node.js
-
-\- Express
-
-\- Socket.IO
-
-\- HTML Canvas API
-
-
-
-\## Project Structure
-
-
+## Project Structure
 
 ```text
-
 collaborative-canvas/
-
 │
-
 ├── client/
-
-│   └── Frontend application
-
+│   ├── canvas.ts
+│   ├── main.ts
+│   ├── websocket.ts
+│   └── types.ts
 │
-
 ├── server/
-
-│   └── Backend and Socket.IO server
-
+│   ├── server.ts
+│   ├── websocket-handler.ts
+│   ├── drawing-state.ts
+│   └── rooms.ts
 │
-
 ├── data/
-
-│   └── Canvas data
-
 │
-
+├── index.html
 ├── package.json
-
+├── package-lock.json
 ├── tsconfig.json
-
 ├── tsconfig.server.json
-
 ├── vite.config.ts
-
-└── README.md
-
+├── README.md
+└── ARCHITECTURE.md
